@@ -23,7 +23,7 @@ echo "== [keeper $(date -u +%FT%TZ)] =="
 echo "-- 1. configured limit (target $TARGET) --"
 OUT="$(python3 "$HERE/set-glm53-context-limit.py" --limit "$TARGET" --dry-run 2>&1)"
 if echo "$OUT" | grep -q "Already set"; then
-  echo "ok: limit.context == $TARGET (compaction trigger at ~$((TARGET - TARGET/4 < 32768 ? TARGET/4 : 32768)) tokens)"
+  echo "ok: limit.context == $TARGET (compaction trigger at ~$((TARGET - (32768 < TARGET/4 ? 32768 : TARGET/4))) tokens)"
 else
   echo "DRIFT: $OUT"
   echo "fix:  python3 $HERE/set-glm53-context-limit.py --limit $TARGET"
