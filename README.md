@@ -11,10 +11,11 @@ token cost.
 |---|---|---|
 | [`patches/0001`](patches/0001-tui-transcript-scrollbar.patch) | Interactive scrollbar for the fullscreen transcript viewport (three-column grab target, thumb-centering drags) | Validated on fork; upstream issue [#217](https://github.com/MiniMax-AI/minimax-code/issues/217) |
 | [`patches/0002`](patches/0002-tui-context-meter-status-item.patch) | Opt-in status-line context gauge (`Context ▕██████░░▏ 77% left`) with thresholds + minimal fallback | Validated on fork; upstream issue [#216](https://github.com/MiniMax-AI/minimax-code/issues/216) |
-| [`compaction-fix/`](compaction-fix/README.md) | Root cause + repair of the `INVALID_CHECKPOINT` auto-compaction failures on local vLLM (KV dual-tenancy); surgical config script + probe | **Applied on this machine; mechanism probe-verified; in-vivo success flip pending next auto-trigger** |
+| [`compaction-fix/`](compaction-fix/README.md) | Root cause + repair of the `INVALID_CHECKPOINT` auto-compaction failures on local vLLM (KV dual-tenancy); surgical config script + probe | Applied on this machine; mechanism probe-verified; **limit is cached per session — restart MCode to activate** |
 | [`jev-ultrafast/`](jev-ultrafast/README.md) | Jev Ultrafast fast browser agent wired for arm64 (TypeSafe skill for the `minimax-code` agent target, snap Chromium + Playwright arm64, local text model) | Installed on this machine; TypeSafe key pending |
 | [`playwright-mcp/`](playwright-mcp/README.md) | Microsoft Playwright MCP as MCode MCP tools (`~/.minimax/mcp.json` / `.mcp.json`), arm64 browser notes, security gates | Documented; ready to enable |
 | [`performance/`](performance/ledger-2026-09-19.md) | Real usage ledger (the runtime's own sqlite accounting) + timed probes + a methodology for validating agent performance claims | Live data + reproducible collector |
+| [`container/`](container/README.md) + [`Dockerfile`](Dockerfile) | Pre-built arm64 GHCR image: official [@minimax-ai/code](https://www.npmjs.com/package/@minimax-ai/code) 0.4.12 overlaid with the patched bundles + arm64 Playwright Chromium + pack tooling | Built & smoke-tested on GitHub's arm64 runner → `ghcr.io/drowzeys/keys-mcode-enhancement-pack` |
 
 ## Why this pack exists
 
@@ -42,7 +43,14 @@ npx playwright install chromium   # arm64 real-Chromium path
 
 # 4. Performance ledger, reproduced from your own runtime
 python3 performance/collect-usage.py --day $(date +%F)
+
+# 5. Or skip all of it — pull the pre-built image (arm64)
+docker pull ghcr.io/drowzeys/keys-mcode-enhancement-pack:latest
 ```
+
+Upstream MCode itself: [MiniMax-AI/minimax-code](https://github.com/MiniMax-AI/minimax-code)
+(source, MIT) / [@minimax-ai/code on npm](https://www.npmjs.com/package/@minimax-ai/code)
+(official releases). The pack's patches and image sit on top of 0.4.12.
 
 ## Highlights
 

@@ -4,7 +4,11 @@
   Code. The two patches in `patches/` are derived from this codebase and carry
   its license; the upstream project is
   https://github.com/MiniMax-AI/minimax-code (contribution issues #216, #217;
-  validated branches on the `drowzeys` fork).
+  validated branches on the `drowzeys` fork). Official distribution:
+  [@minimax-ai/code on npm](https://www.npmjs.com/package/@minimax-ai/code)
+  (v0.4.12 at the time of this pack). The container image overlays this
+  pack's patched bundles onto that official release; no upstream binaries are
+  modified beyond the two documented patches.
 - **Jev Ultrafast** — https://github.com/browser-use/jev-ultrafast (browser-use).
   Referenced and integrated via its own project instructions; not redistributed
   here.

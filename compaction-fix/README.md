@@ -5,18 +5,19 @@ Diagnosis and fix for the `INVALID_CHECKPOINT` compaction failures that killed a
 
 ## Symptom
 
-Automatic context compaction fired four times near the context ceiling and failed
-every time (from `~/.minimax/v2/observability/logs/runtime-*.log`; attempts
-184–187):
+Automatic context compaction fired repeatedly as the session approached the
+ceiling and failed **every time — 28 failed attempts in total** across the
+session's 12:40–20:37 lifetime (from
+`~/.minimax/v2/observability/logs/runtime-*.log`). The final burst (20:19–20:37)
+is representative:
 
 ```
-context_compaction_checkpoint_attempt_settled ... input_message_count: 438-442 ... outcome: "failed", duration_ms: 22124
+context_compaction_checkpoint_attempt_settled ... input_message_count: 435-442 ... outcome: "failed", duration_ms: 21529-27202
 context_compaction_failed ... stop_reason: "error", output_tokens: 0, error_code: "INVALID_CHECKPOINT", error_stage: "llm_checkpoint"
 ```
 
-Four attempts (observed durations 22.1 s, 25.6 s, 27.2 s for the last three) —
-all with **0 output tokens**. The session then hard-stalled with ~7% context
-left and had to be abandoned.
+All 28 attempts ended with **0 output tokens**; not one succeeded. The session
+then hard-stalled with ~7% context left and had to be abandoned.
 
 ## Server facts (read from vLLM `/metrics`)
 
@@ -99,14 +100,29 @@ Apply it surgically (backs up the config first):
 python3 set-glm53-context-limit.py --limit 128000
 ```
 
+## Deployment note: the limit is cached per session
+
+The provider context limit is read when a session **starts**. Changing
+`config.yaml` does not affect an already-running session — verified on this
+machine: a continuation session crossed the *new* 96 K trigger line (104 K
+input tokens on its latest call) with **zero** compaction events in its runtime
+log, proving it was still running on the old 200 K budget. Practical
+consequences:
+
+- Apply the fix, then **restart MCode**; new sessions pick up the 128 K limit.
+- `check-status.sh` (this directory) prints the configured limit, the trigger
+  math, and the latest compaction outcomes — run it after any config change.
+
 ## Verify
 
 1. Config parses and only the intended number changed:
    `python3 -c "import yaml;print(yaml.safe_load(open('$HOME/.minimax/config.yaml'))['custom_provider']['glm53']['models']['GLM-5.3-EXL3']['limit'])"`
-2. On the next automatic compaction trigger, the runtime log must flip from
-   `outcome":"failed"` to `outcome":"succeeded"`:
+2. In a session started **after** the fix, on the next automatic compaction
+   trigger the runtime log must flip from `outcome":"failed"` to
+   `outcome":"succeeded"`:
    ```bash
-   grep -h "context_compaction_checkpoint_attempt_settled" ~/.minimax/v2/observability/logs/runtime-*.log | tail
+   bash check-status.sh        # or:
+   grep -h "context_compaction" ~/.minimax/v2/observability/logs/runtime-*.log | tail
    ```
 3. With the companion context-meter patch (see `../patches/`) the status line
    shows remaining headroom recover after compaction instead of draining to 7%.
@@ -115,3 +131,4 @@ python3 set-glm53-context-limit.py --limit 128000
 
 - `set-glm53-context-limit.py` — surgical, idempotent config editor (backup + verify)
 - `ckpt-probe.py` — the two-size probe used to isolate the root cause
+- `check-status.sh` — current limit, trigger math, and latest compaction outcomes
