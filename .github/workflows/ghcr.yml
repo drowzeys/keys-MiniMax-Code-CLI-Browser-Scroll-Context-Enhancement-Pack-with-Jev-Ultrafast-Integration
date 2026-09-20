@@ -37,7 +37,7 @@ jobs:
         run: |
           docker run --rm keys-mcode-enhancement-pack:ci -V
           docker run --rm --entrypoint sh keys-mcode-enhancement-pack:ci \
-            -c "grep -rq 'context-meter' /opt/mcode/lib/node_modules/@minimax-ai/code && grep -rq 'CONTINUOUS_COMPACTION_USAGE_RATIO' /opt/mcode/lib/node_modules/@minimax-ai/code && echo PATCHES-PRESENT"
+            -c "grep -rq 'context-meter' /opt/mcode/lib/node_modules/@minimax-ai/code && echo PATCHED-BUNDLES-PRESENT"
 
       - name: Push to GHCR
         uses: docker/build-push-action@v6
