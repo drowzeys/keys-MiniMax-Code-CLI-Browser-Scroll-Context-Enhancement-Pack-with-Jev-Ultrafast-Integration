@@ -32,6 +32,15 @@ done
 echo "Enforcing the safe local-vLLM context ceiling"
 python3 "$PACK_DIR/compaction-fix/set-glm53-context-limit.py" --limit "${CONTINUOUS_COMPACTION_LIMIT:-64000}"
 
+mkdir -p "$HOME/.local/bin"
+USER_LAUNCHER="$HOME/.local/bin/mcode-enhanced"
+if [ -e "$USER_LAUNCHER" ] && ! grep -q "$PACK_DIR/maintenance/maintain-active-mcode.sh" "$USER_LAUNCHER" 2>/dev/null; then
+  echo "NOTE: preserving existing $USER_LAUNCHER; install the pack launcher elsewhere if needed."
+else
+  install -m 0755 "$PACK_DIR/bin/mcode-enhanced" "$USER_LAUNCHER"
+  echo "installed automatic launcher: $USER_LAUNCHER"
+fi
+
 if [ -x "$HOME/.local/bin/mcode" ] && grep -q 'enforce-continuous-compaction.sh' "$HOME/.local/bin/mcode"; then
   echo "launch enforcer: already wired into $HOME/.local/bin/mcode"
 else
@@ -47,3 +56,5 @@ fi
 echo
 echo "Done. Restart MCode so the new context policy is loaded."
 echo "Run: $PACK_DIR/compaction-fix/check-status.sh"
+echo "Launch future sessions with: $USER_LAUNCHER"
+echo "Set MCODE_SOURCE_TREE if the MCode source is not /home/keyspark/minimax-code."

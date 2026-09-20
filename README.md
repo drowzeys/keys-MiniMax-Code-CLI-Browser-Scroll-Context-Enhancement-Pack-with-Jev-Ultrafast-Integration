@@ -41,8 +41,17 @@ upstream timing.
 
 The installer applies all compatible MCode patches, installs the durable
 launch-time compaction enforcer, configures the 64K local-vLLM ceiling, and
-prints the checks still requiring a fresh MCode session. It preserves user
-config and does not install credentials.
+installs `~/.local/bin/mcode-enhanced`. Launching through that wrapper checks
+the active MCode release and automatically reapplies/rebuilds the pack after
+an update. It preserves user config and does not install credentials.
+
+For a nonstandard installation, set the official launcher and source paths:
+
+```bash
+MCODE_REAL_BIN=/path/to/official/mcode \
+MCODE_SOURCE_TREE=/path/to/minimax-code \
+  ~/.local/bin/mcode-enhanced
+```
 
 Manual steps, when needed:
 

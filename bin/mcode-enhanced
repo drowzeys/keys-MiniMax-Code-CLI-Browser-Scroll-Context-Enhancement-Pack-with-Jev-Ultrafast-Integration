@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Portable launcher installed by install-one-shot.sh.
+set -u
+
+PACK_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+REAL_MCODE="${MCODE_REAL_BIN:-$HOME/.minimax-code/bin/mcode}"
+
+"$PACK_DIR/maintenance/maintain-active-mcode.sh" ||
+  echo "warning: enhancement reapply failed; launching official Mcode" >&2
+"$PACK_DIR/compaction-fix/enforce-continuous-compaction.sh" ||
+  echo "warning: compaction enforcement failed; launching official Mcode" >&2
+
+if [ ! -x "$REAL_MCODE" ]; then
+  echo "Mcode launcher not found: $REAL_MCODE" >&2
+  echo "Set MCODE_REAL_BIN to the official Mcode launcher path." >&2
+  exit 1
+fi
+
+case "${1-}" in
+  exec|acp|provider|plugin|login|logout|update|init|-h|--help|-V|--version)
+    exec "$REAL_MCODE" "$@"
+    ;;
+esac
+for arg in "$@"; do
+  if [ "$arg" = "--tui-mode" ]; then
+    exec "$REAL_MCODE" "$@"
+  fi
+done
+exec "$REAL_MCODE" --tui-mode fullscreen "$@"
