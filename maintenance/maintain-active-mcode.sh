@@ -14,9 +14,11 @@ UPSTREAM_URL="${MCODE_UPSTREAM_URL:-https://github.com/MiniMax-AI/minimax-code.g
 
 warn() { printf 'mcode enhancement maintenance: %s\n' "$*" >&2; }
 
-[ -e "$CURRENT_LINK" ] || exit 0
-RELEASE_DIR="$(readlink -f "$CURRENT_LINK")"
-VERSION="$(basename "$RELEASE_DIR")"
+[ -f "$CURRENT_LINK" ] || exit 0
+VERSION="$(tr -d '\r\n' < "$CURRENT_LINK")"
+case "$VERSION" in ""|*[!0-9A-Za-z._-]*) exit 0;; esac
+RELEASE_DIR="$INSTALL_ROOT/releases/$VERSION"
+[ -d "$RELEASE_DIR" ] || exit 0
 ACTIVE_PACKAGE="$RELEASE_DIR/lib/node_modules/@minimax-ai/code"
 [ -f "$ACTIVE_PACKAGE/package.json" ] || exit 0
 
@@ -50,8 +52,16 @@ apply_patch_file() {
   elif git -C "$BUILD_TREE" apply --reverse --check "$patch" >/dev/null 2>&1; then
     :
   else
-    warn "cannot apply $(basename "$patch") to $BUILD_TREE"
-    return 1
+    case "$(basename "$patch")" in
+      0001-*) marker='tui-scrollbar-interaction|scrollbar' ;;
+      0002-*) marker='context-meter' ;;
+      0003-*) marker='CONTINUOUS_COMPACTION_USAGE_RATIO' ;;
+    esac
+    if ! rg -q "$marker" "$BUILD_TREE/packages" 2>/dev/null; then
+      warn "cannot apply $(basename "$patch") to $BUILD_TREE"
+      return 1
+    fi
+    warn "$(basename "$patch") is already present with equivalent source"
   fi
 }
 
