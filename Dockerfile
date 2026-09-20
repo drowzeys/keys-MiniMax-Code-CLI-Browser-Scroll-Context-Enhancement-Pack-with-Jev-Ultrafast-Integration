@@ -47,8 +47,11 @@ RUN npx --yes playwright@latest install --with-deps chromium \
 # Pack tooling that is useful in-container
 COPY compaction-fix/ /opt/keys-pack/compaction-fix/
 COPY performance/ /opt/keys-pack/performance/
-# Launcher mirrors the upstream .mcode-launcher invocation
-RUN printf '#!/bin/sh\nset -eu\nexec /usr/bin/node /opt/mcode/lib/node_modules/@minimax-ai/code/cli.js "$@"\n' \
+# Launcher mirrors the upstream .mcode-launcher invocation; node's path in the
+# official image is /usr/local/bin/node, with a /usr/bin/node symlink for any
+# internals that hardcode the host-style path.
+RUN ln -sf /usr/local/bin/node /usr/bin/node \
+ && printf '#!/bin/sh\nset -eu\nexec /usr/local/bin/node /opt/mcode/lib/node_modules/@minimax-ai/code/cli.js "$@"\n' \
       > /usr/local/bin/mcode && chmod +x /usr/local/bin/mcode \
  && chmod +x /opt/keys-pack/compaction-fix/*.py /opt/keys-pack/compaction-fix/*.sh /opt/keys-pack/performance/*.py
 LABEL org.opencontainers.image.title="keys MCode enhancement pack (patched MiniMax Code CLI + arm64 browser stack)" \
