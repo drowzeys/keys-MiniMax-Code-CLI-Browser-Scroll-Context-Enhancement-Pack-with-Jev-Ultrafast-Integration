@@ -1,0 +1,119 @@
+diff --git a/packages/agent-modules/context-manager/src/provider-budget.ts b/packages/agent-modules/context-manager/src/provider-budget.ts
+index 234185b..9288807 100644
+--- a/packages/agent-modules/context-manager/src/provider-budget.ts
++++ b/packages/agent-modules/context-manager/src/provider-budget.ts
+@@ -1,4 +1,7 @@
+-import { DEFAULT_CONTEXT_MANAGER_SETTINGS } from './settings.js';
++import {
++  CONTINUOUS_COMPACTION_USAGE_RATIO,
++  DEFAULT_CONTEXT_MANAGER_SETTINGS,
++} from './settings.js';
+ 
+ const PROVIDER_INPUT_RATIO = 0.95;
+ 
+@@ -31,12 +34,14 @@ export function resolveCompactionTokenBudget(input: {
+       input.contextWindow - effectiveOutput - safetyMarginTokens,
+     ),
+   );
+-  const proactiveReserve = Math.min(reserveTokens * 2, Math.floor(input.contextWindow / 4));
+   return {
+     providerInputLimit,
++    // Keep the trigger independent of the provider ceiling. This is the
++    // recurring renewal point: after compaction reduces the history, the next
++    // 25% of newly accumulated context starts the next cycle.
+     automaticTriggerAt: Math.min(
+       providerInputLimit,
+-      Math.max(1, input.contextWindow - proactiveReserve),
++      Math.max(1, Math.floor(input.contextWindow * CONTINUOUS_COMPACTION_USAGE_RATIO)),
+     ),
+   };
+ }
+diff --git a/packages/agent-modules/context-manager/src/settings.ts b/packages/agent-modules/context-manager/src/settings.ts
+index 790cd13..fd23fc1 100644
+--- a/packages/agent-modules/context-manager/src/settings.ts
++++ b/packages/agent-modules/context-manager/src/settings.ts
+@@ -10,10 +10,13 @@ export const DEFAULT_CONTEXT_MANAGER_SETTINGS = {
+   strategyVersion: 'agent-modules-context-manager-v1',
+ } satisfies ContextManagerSettings;
+ 
++/** Start a new compaction cycle after one quarter of the context is used. */
++export const CONTINUOUS_COMPACTION_USAGE_RATIO = 0.25;
++
+ /**
+- * Shared compaction trigger threshold. MiniMax-M3's 512K and 1M context modes
+- * use the product-defined 90% line. Other models reserve the greater of the
+- * configured reserve and one turn's output budget plus the safety margin.
++ * Shared compaction trigger threshold. Continuous compaction intentionally
++ * starts early, at 25% utilization, so a session is renewed repeatedly and
++ * does not wait until the provider is near exhaustion.
+  */
+ export function computeCompactionTriggerAt(input: {
+   modelId?: string;
+@@ -22,16 +25,9 @@ export function computeCompactionTriggerAt(input: {
+   reserveTokens: number;
+   safetyMarginTokens: number;
+ }): number {
+-  if (
+-    input.modelId === 'MiniMax-M3' &&
+-    (input.contextWindow === 512_000 || input.contextWindow === 1_000_000)
+-  ) {
+-    return Math.floor(input.contextWindow * 0.9);
+-  }
+-  const perTurnMaxTokens =
+-    Number.isFinite(input.perTurnMaxTokens) && input.perTurnMaxTokens > 0
+-      ? input.perTurnMaxTokens
+-      : 0;
+-  const reserve = Math.max(input.reserveTokens, perTurnMaxTokens + input.safetyMarginTokens);
+-  return Math.max(1, input.contextWindow - reserve);
++  void input.modelId;
++  void input.perTurnMaxTokens;
++  void input.reserveTokens;
++  void input.safetyMarginTokens;
++  return Math.max(1, Math.floor(input.contextWindow * CONTINUOUS_COMPACTION_USAGE_RATIO));
+ }
+diff --git a/packages/agent-modules/context-manager/test/continuous-trigger.test.ts b/packages/agent-modules/context-manager/test/continuous-trigger.test.ts
+new file mode 100644
+index 0000000..4b21c6b
+--- /dev/null
++++ b/packages/agent-modules/context-manager/test/continuous-trigger.test.ts
+@@ -0,0 +1,40 @@
++import { describe, expect, it } from 'vitest';
++import { computeCompactionTriggerAt } from '../src/settings.js';
++import { resolveCompactionTokenBudget } from '../src/provider-budget.js';
++
++describe('continuous context renewal', () => {
++  it('starts compaction after 25% of the context is used', () => {
++    expect(
++      computeCompactionTriggerAt({
++        modelId: 'any-model',
++        contextWindow: 128_000,
++        perTurnMaxTokens: 8_192,
++        reserveTokens: 16_384,
++        safetyMarginTokens: 2_048,
++      }),
++    ).toBe(32_000);
++  });
++
++  it('keeps the same 25% trigger for every renewal cycle', () => {
++    expect(
++      resolveCompactionTokenBudget({
++        contextWindow: 128_000,
++        configuredMaxOutputTokens: 8_192,
++      }),
++    ).toMatchObject({
++      automaticTriggerAt: 32_000,
++      providerInputLimit: 111_616,
++    });
++  });
++
++  it('clamps tiny windows to a usable one-token trigger', () => {
++    expect(
++      computeCompactionTriggerAt({
++        contextWindow: 2,
++        perTurnMaxTokens: 1,
++        reserveTokens: 1,
++        safetyMarginTokens: 1,
++      }),
++    ).toBe(1);
++  });
++});

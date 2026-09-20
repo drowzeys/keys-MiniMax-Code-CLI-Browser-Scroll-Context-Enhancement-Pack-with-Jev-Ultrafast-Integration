@@ -6,9 +6,9 @@ hand. Built by GitHub Actions on an arm64 runner and published to GHCR.
 ## Pull
 
 ```bash
-docker pull ghcr.io/drowzeys/keys-mcode-enhancement-pack:latest
+docker pull ghcr.io/drowzeys/keys-mcode-continuous-context-browser-decision-enhancement-pack:latest
 # pinned:
-docker pull ghcr.io/drowzeys/keys-mcode-enhancement-pack:0.4.12-keys1
+docker pull ghcr.io/drowzeys/keys-mcode-continuous-context-browser-decision-enhancement-pack:0.4.12-keys1
 ```
 
 If the pull is denied right after the first publish, the package may still be
@@ -21,7 +21,7 @@ GitHub CLI, see below), it is intended to be public.
   [@minimax-ai/code](https://www.npmjs.com/package/@minimax-ai/code) release
   from the public npm registry, which ships the correct arm64 native modules)
   **overlaid with the pack's patched bundles** built from source at the exact
-  upstream commit both patches sit on — so the fullscreen-transcript scrollbar
+  upstream commit the patches sit on — so the fullscreen-transcript scrollbar
   and the context-meter status item are actually active
 - **arm64 browser stack**: Playwright's real arm64 Chromium
   (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`) — Google ships no arm64 Linux
@@ -38,7 +38,7 @@ GitHub CLI, see below), it is intended to be public.
   ```bash
   docker run -it --rm \
     -v "$HOME/.minimax:/root/.minimax" \
-    ghcr.io/drowzeys/keys-mcode-enhancement-pack:latest
+    ghcr.io/drowzeys/keys-mcode-continuous-context-browser-decision-enhancement-pack:latest
   ```
 - **No TypeSafe key** — bring your own for Jev's policy layer
 
@@ -51,12 +51,12 @@ GitHub CLI, see below), it is intended to be public.
   in the overlay) and only then pushes. Manual dispatch or `v*` tag
 - Rebuild/check status:
   ```bash
-  gh run list -R drowzeys/keys-MiniMax-Code-CLI-Browser-Scroll-Context-Enhancement-Pack-with-Jev-Ultrafast-Integration --workflow ghcr.yml --limit 3
-  gh workflow run ghcr.yml -R drowzeys/keys-MiniMax-Code-CLI-Browser-Scroll-Context-Enhancement-Pack-with-Jev-Ultrafast-Integration
+  gh run list -R drowzeys/keys-mcode-continuous-context-browser-decision-enhancement-pack --workflow ghcr.yml --limit 3
+  gh workflow run ghcr.yml -R drowzeys/keys-mcode-continuous-context-browser-decision-enhancement-pack
   ```
 - Make the package public after first publish (one-time):
   ```bash
-  gh api --method PATCH /user/packages/container/keys-mcode-enhancement-pack \
+  gh api --method PATCH /user/packages/container/keys-mcode-continuous-context-browser-decision-enhancement-pack \
     -f visibility=public || echo "flip visibility in the web UI: Package settings -> Danger Zone -> Change visibility"
   ```
 
