@@ -5,16 +5,18 @@ Diagnosis and fix for the `INVALID_CHECKPOINT` compaction failures that killed a
 
 ## Symptom
 
-Automatic context compaction fired three times near the context ceiling and failed
-every time (from `~/.minimax/v2/observability/logs/runtime-*.log`):
+Automatic context compaction fired four times near the context ceiling and failed
+every time (from `~/.minimax/v2/observability/logs/runtime-*.log`; attempts
+184–187):
 
 ```
-context_compaction_checkpoint_attempt_settled ... input_message_count: 440 ... outcome: "failed", duration_ms: 22124
+context_compaction_checkpoint_attempt_settled ... input_message_count: 438-442 ... outcome: "failed", duration_ms: 22124
 context_compaction_failed ... stop_reason: "error", output_tokens: 0, error_code: "INVALID_CHECKPOINT", error_stage: "llm_checkpoint"
 ```
 
-Three attempts: 22.1 s, 25.6 s, 27.2 s — all with **0 output tokens**. The session
-then hard-stalled with ~7% context left and had to be abandoned.
+Four attempts (observed durations 22.1 s, 25.6 s, 27.2 s for the last three) —
+all with **0 output tokens**. The session then hard-stalled with ~7% context
+left and had to be abandoned.
 
 ## Server facts (read from vLLM `/metrics`)
 
