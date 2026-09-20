@@ -109,3 +109,17 @@ Upstream MCode itself: [MiniMax-AI/minimax-code](https://github.com/MiniMax-AI/m
   ([`browser-cdp/`](browser-cdp/README.md), verified end-to-end).
 
 See [`ATTRIBUTION.md`](ATTRIBUTION.md) for component provenance and licenses.
+
+## Credits and thanks
+
+With sincere thanks to the original creators and maintainers whose work made
+this pack possible: the [MiniMax Code team](https://github.com/MiniMax-AI/minimax-code),
+[pi-mono](https://github.com/badlogic/pi-mono), [Syntra](https://github.com/ashhart/Syntra),
+[djev-spark](https://github.com/mmastrac/djev-spark), [Jev Ultrafast](https://github.com/browser-use/jev-ultrafast),
+[TypeSafe](https://github.com/typesafe-ai/skills), [Microsoft Playwright](https://github.com/microsoft/playwright),
+[Playwright MCP](https://github.com/microsoft/playwright-mcp), [browser-harness](https://github.com/browser-use/browser-harness),
+[DeepSeek-Harness-Browser](https://github.com/tonyd2wild/DeepSeek-Harness-Browser),
+[DeepSeek-Harness-Vision-Tools](https://github.com/tonyd2wild/DeepSeek-Harness-Vision-Tools),
+the [vLLM](https://github.com/vllm-project/vllm) project, and the maintainers of
+Node.js, pnpm, Docker, GitHub Actions, and GHCR. Their licenses, source links,
+and the specific methods used are documented in [`ATTRIBUTION.md`](ATTRIBUTION.md).

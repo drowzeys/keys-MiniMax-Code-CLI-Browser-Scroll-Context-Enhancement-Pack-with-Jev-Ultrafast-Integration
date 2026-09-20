@@ -5,6 +5,23 @@ licenses and names the projects, source repositories, and methods that made
 each feature possible. No third-party credentials, model weights, or private
 runtime data are redistributed.
 
+## Thank you to the original creators
+
+We gratefully acknowledge the creators, maintainers, and contributors of every
+project this pack builds on or learns from: the MiniMax Code team; the
+`pi-mono` maintainers; ashhart and the Syntra contributors; mmastrac and the
+djev-spark contributors; browser-use and the Jev Ultrafast and browser-harness
+contributors; the TypeSafe team; Microsoft and the Playwright and Playwright
+MCP contributors; tonyd2wild and the DeepSeek-Harness contributors; the vLLM
+community; and the Node.js, pnpm, Docker, GitHub Actions, and GHCR teams.
+
+Thank you for creating, documenting, testing, and sharing the components and
+ideas that this integration pack brings together. This acknowledgement is
+appreciation and provenance, not a claim that these creators endorse this pack.
+
+The detailed project-by-project credits, licenses, source links, and usage
+boundaries follow below.
+
 - **MiniMax Code** (`minimax-code`) — MIT License, Copyright (c) 2026 MiniMax
   Code. The three patches in `patches/` are derived from this codebase and carry
   its license; the upstream project is
