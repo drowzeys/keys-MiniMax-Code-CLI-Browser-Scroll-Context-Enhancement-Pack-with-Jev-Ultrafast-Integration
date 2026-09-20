@@ -13,20 +13,33 @@ if [ ! -d "$SOURCE_TREE/.git" ]; then
 fi
 
 echo "Applying MCode patches to $SOURCE_TREE"
-for patch in \
-  "$PACK_DIR/patches/0001-tui-transcript-scrollbar.patch" \
-  "$PACK_DIR/patches/0002-tui-context-meter-status-item.patch" \
-  "$PACK_DIR/patches/0003-continuous-context-renewal-25-percent.patch"; do
+apply_patch_file() {
+  local patch="$1"
   if git -C "$SOURCE_TREE" apply --check "$patch" >/dev/null 2>&1; then
     git -C "$SOURCE_TREE" apply "$patch"
     echo "applied: $(basename "$patch")"
   elif git -C "$SOURCE_TREE" apply --reverse --check "$patch" >/dev/null 2>&1; then
     echo "already applied: $(basename "$patch")"
   else
-    echo "cannot apply cleanly: $(basename "$patch")" >&2
-    echo "Review the source version and apply the patch manually." >&2
-    exit 1
+    case "$(basename "$patch")" in
+      0001-*) marker='tui-scrollbar-interaction|scrollbar' ;;
+      0002-*) marker='context-meter' ;;
+      0003-*) marker='CONTINUOUS_COMPACTION_USAGE_RATIO' ;;
+    esac
+    if rg -q "$marker" "$SOURCE_TREE/packages" 2>/dev/null; then
+      echo "already present with equivalent source: $(basename "$patch")"
+    else
+      echo "cannot apply cleanly: $(basename "$patch")" >&2
+      echo "Review the source version and apply the patch manually." >&2
+      exit 1
+    fi
   fi
+}
+for patch in \
+  "$PACK_DIR/patches/0001-tui-transcript-scrollbar.patch" \
+  "$PACK_DIR/patches/0002-tui-context-meter-status-item.patch" \
+  "$PACK_DIR/patches/0003-continuous-context-renewal-25-percent.patch"; do
+  apply_patch_file "$patch"
 done
 
 echo "Enforcing the safe local-vLLM context ceiling"

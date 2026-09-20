@@ -36,7 +36,7 @@ upstream timing.
 ## One-shot apply recipe
 
 ```bash
-./install-one-shot.sh
+MCODE_SOURCE_TREE=/path/to/minimax-code ./install-one-shot.sh
 ```
 
 The installer applies all compatible MCode patches, installs the durable
