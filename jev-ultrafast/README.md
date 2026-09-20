@@ -33,6 +33,13 @@ browser over CDP) — into the MCode agent stack on arm64 Linux, where the usual
 
 - A live desktop exists on this box (`:0`), so headed browser flows are
   possible; headless CDP flows go through the Playwright arm64 build.
+- **2026-09-20 update:** snap Chromium is a **CDP dead end** for
+  `browser-harness` — `--doctor` prints *Snap confinement prevents CDP
+  binding*. The measured, verified lane is
+  [`../browser-cdp/`](../browser-cdp/README.md): Playwright's arm64 Chromium,
+  headless, `--no-sandbox` (mandatory under Ubuntu 24.04+ AppArmor), attached
+  via `BU_CDP_URL`. This module's snap note above remains valid only for
+  headed desktop use.
 - The `browser-harness` skill (CDP control: click/type/navigate, logged-in
   sessions) is the MCode-side counterpart for interactive work; Jev is the
   policy/fast-path layer on top.

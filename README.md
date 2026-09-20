@@ -14,6 +14,8 @@ token cost.
 | [`compaction-fix/`](compaction-fix/README.md) | Root cause + repair of the `INVALID_CHECKPOINT` auto-compaction failures on local vLLM (KV dual-tenancy); surgical config script + probe | Applied on this machine; mechanism probe-verified; **limit is cached per session — restart MCode to activate** |
 | [`jev-ultrafast/`](jev-ultrafast/README.md) | Jev Ultrafast fast browser agent wired for arm64 (TypeSafe skill for the `minimax-code` agent target, snap Chromium + Playwright arm64, local text model) | Installed on this machine; TypeSafe key pending |
 | [`playwright-mcp/`](playwright-mcp/README.md) | Microsoft Playwright MCP as MCode MCP tools (`~/.minimax/mcp.json` / `.mcp.json`), arm64 browser notes, security gates | Documented; ready to enable |
+| [`browser-cdp/`](browser-cdp/README.md) | The measured CDP lane for `browser-harness` on arm64: Playwright Chromium 153 headless + `--no-sandbox` (AppArmor makes it mandatory) + `BU_CDP_URL` attach; snap Chromium ruled out — confinement blocks CDP entirely | **Verified on this machine 2026-09-20**; `smoke-test.sh` PASS |
+| [`vision-tools/`](vision-tools/README.md) | Eyes for the text-only local lane: `analyze_image` (door 2, files on disk) + `vision_proxy` (door 1, chat attachments); local VLM only, the brain sees words never pixels; pattern from tonyd2wild/dsh (MIT) | Ported; failure paths verified live (endpoint-naming errors, degrade-not-throw, byte-identical pass-through); **no live VLM on this box yet — validate before use** |
 | [`performance/`](performance/ledger-2026-09-19.md) | Real usage ledger (the runtime's own sqlite accounting) + timed probes + a methodology for validating agent performance claims | Live data + reproducible collector |
 | [`container/`](container/README.md) + [`Dockerfile`](Dockerfile) | Pre-built arm64 GHCR image: official [@minimax-ai/code](https://www.npmjs.com/package/@minimax-ai/code) 0.4.12 overlaid with the patched bundles + arm64 Playwright Chromium + pack tooling | Built & smoke-tested on GitHub's arm64 runner → `ghcr.io/drowzeys/keys-mcode-enhancement-pack` |
 
@@ -41,10 +43,17 @@ python3 compaction-fix/set-glm53-context-limit.py --limit 128000
 # 3. Playwright MCP (see playwright-mcp/README.md)
 npx playwright install chromium   # arm64 real-Chromium path
 
-# 4. Performance ledger, reproduced from your own runtime
+# 4. Verified browser CDP lane (see browser-cdp/README.md)
+./browser-cdp/smoke-test.sh          # launches + verifies end-to-end, PASS/FAIL
+
+# 5. Vision tools for the text-only lane (needs a local VLM endpoint; see
+#    vision-tools/README.md — read its Status section first)
+./vision-tools/backends/ollama.sh    # then: python3 vision-tools/analyze_image.py <img>
+
+# 6. Performance ledger, reproduced from your own runtime
 python3 performance/collect-usage.py --day $(date +%F)
 
-# 5. Or skip all of it — pull the pre-built image (arm64)
+# 7. Or skip all of it — pull the pre-built image (arm64)
 docker pull ghcr.io/drowzeys/keys-mcode-enhancement-pack:latest
 ```
 
@@ -67,6 +76,11 @@ Upstream MCode itself: [MiniMax-AI/minimax-code](https://github.com/MiniMax-AI/m
   the ~606 tok/s prefill measurement for 136 K-token prompts.
 - **arm64 honesty.** No Google Chrome on arm64 Linux; the pack documents the
   snap-Chromium + Playwright-arm64 reality and wires Jev Ultrafast and
-  Playwright MCP accordingly.
+  Playwright MCP accordingly. Measured further on 2026-09-20: snap Chromium
+  is a **CDP dead end** (`browser-harness --doctor`: *Snap confinement
+  prevents CDP binding*), so the browser lane is now settled by measurement —
+  Playwright's arm64 Chromium, headless, `--no-sandbox` (mandatory under
+  Ubuntu 24.04+ AppArmor), attached via `BU_CDP_URL`
+  ([`browser-cdp/`](browser-cdp/README.md), verified end-to-end).
 
 See [`ATTRIBUTION.md`](ATTRIBUTION.md) for component provenance and licenses.
