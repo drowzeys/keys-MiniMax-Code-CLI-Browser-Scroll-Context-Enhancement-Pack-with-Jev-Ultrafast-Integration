@@ -11,7 +11,7 @@ token cost.
 |---|---|---|
 | [`patches/0001`](patches/0001-tui-transcript-scrollbar.patch) | Interactive scrollbar for the fullscreen transcript viewport (three-column grab target, thumb-centering drags) | Validated on fork; upstream issue [#217](https://github.com/MiniMax-AI/minimax-code/issues/217) |
 | [`patches/0002`](patches/0002-tui-context-meter-status-item.patch) | Opt-in status-line context gauge (`Context ▕██████░░▏ 77% left`) with thresholds + minimal fallback | Validated on fork; upstream issue [#216](https://github.com/MiniMax-AI/minimax-code/issues/216) |
-| [`compaction-fix/`](compaction-fix/README.md) | Root cause + repair of the `INVALID_CHECKPOINT` auto-compaction failures on local vLLM (KV dual-tenancy); surgical config script + probe | Applied on this machine; mechanism probe-verified; **limit is cached per session — restart MCode to activate** |
+| [`compaction-fix/`](compaction-fix/README.md) | Root cause + repair of the `INVALID_CHECKPOINT` auto-compaction failures on local vLLM (KV dual-tenancy), now in **never-reset mode**: 64 K limit → trigger ~48 K → worst-case pair ~104 K vs the 257 K KV cache, enforced on **every launch** by the local mcode wrapper, plus an interval `keeper.sh` watchdog | Enforcement + math verified live 2026-09-20; **limit is cached per session — restart MCode to activate**; first post-restart successful auto-compaction pending |
 | [`jev-ultrafast/`](jev-ultrafast/README.md) | Jev Ultrafast fast browser agent on the **verified arm64 CDP lane** — TypeSafe policy (bring your own key) + local GLM-5.3-EXL3 text leg; dead snap-Chromium pathway removed | **Verified end-to-end 2026-09-20**: fixture smoke 5 actions / 6 decisions / 9.79 s, outcome asserts green |
 | [`playwright-mcp/`](playwright-mcp/README.md) | Microsoft Playwright MCP as MCode MCP tools (`~/.minimax/mcp.json` / `.mcp.json`), arm64 browser notes, security gates | Documented; ready to enable |
 | [`browser-cdp/`](browser-cdp/README.md) | The measured CDP lane for `browser-harness` on arm64: Playwright Chromium 153 headless + `--no-sandbox` (AppArmor makes it mandatory) + `BU_CDP_URL` attach; snap Chromium ruled out — confinement blocks CDP entirely | **Verified on this machine 2026-09-20**; `smoke-test.sh` PASS |
@@ -37,8 +37,10 @@ upstream timing.
 git am patches/0001-tui-transcript-scrollbar.patch
 git am patches/0002-tui-context-meter-status-item.patch
 
-# 2. Compaction repair for local vLLM serving (see compaction-fix/README.md)
-python3 compaction-fix/set-glm53-context-limit.py --limit 128000
+# 2. Compaction repair + never-reset mode for local vLLM serving
+#    (see compaction-fix/README.md; the local mcode wrapper enforces it)
+python3 compaction-fix/set-glm53-context-limit.py --limit 64000   # never-reset default (128000 = longer stretches, single-session safe)
+bash compaction-fix/check-status.sh                               # trigger/pair math + latest outcomes
 
 # 3. Playwright MCP (see playwright-mcp/README.md)
 npx playwright install chromium   # arm64 real-Chromium path

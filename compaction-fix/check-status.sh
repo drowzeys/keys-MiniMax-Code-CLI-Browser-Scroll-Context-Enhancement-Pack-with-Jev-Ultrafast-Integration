@@ -17,9 +17,18 @@ try:
     out = m["limit"]["output"]
     reserve = 16384
     trigger = ctx - min(2 * reserve, ctx // 4)
+    pair = 2 * trigger + 8192  # worst case: resident history + checkpoint + output
+    target = int(__import__("os").environ.get("CONTINUOUS_COMPACTION_LIMIT", "64000"))
     print(f"limit.context={ctx}  limit.output={out}")
     print(f"compaction trigger ≈ {trigger} estimated tokens (ctx - min(2*16384, ctx/4))")
-    print("FIXED (128K)" if ctx <= 128000 else "NOT FIXED — run: python3 set-glm53-context-limit.py --limit 128000")
+    print(f"worst-case compaction pair ≈ {pair} tokens vs 257,472-token KV cache")
+    if ctx <= target:
+        print(f"CONTINUOUS ({ctx//1000}K: never-reset policy, pair fits with {257472-pair} headroom)")
+    elif ctx <= 128000:
+        print(f"FIXED (single-session safe) but below never-reset target {target} —")
+        print(f"  run: python3 set-glm53-context-limit.py --limit {target}")
+    else:
+        print("DANGEROUS — compaction near the ceiling CANNOT fit the KV cache.")
 except Exception as e:
     print(f"could not read config: {e}")
 EOF

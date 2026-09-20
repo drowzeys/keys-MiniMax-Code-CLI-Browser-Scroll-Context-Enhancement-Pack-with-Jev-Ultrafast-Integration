@@ -132,3 +132,84 @@ consequences:
 - `set-glm53-context-limit.py` — surgical, idempotent config editor (backup + verify)
 - `ckpt-probe.py` — the two-size probe used to isolate the root cause
 - `check-status.sh` — current limit, trigger math, and latest compaction outcomes
+- `enforce-continuous-compaction.sh` — launch-time enforcer (called by the local wrapper)
+- `keeper.sh` — interval watchdog for cron/systemd-timer (drift + failure scan)
+
+---
+
+# Continuous compaction: the never-reset mode (2026-09-20)
+
+The model runs locally (GLM-5.3-EXL3, 3.0 bpw, TP=4 across the 4 Sparks) —
+inference is unlimited and free, so the economics flip: compaction can run as
+often as needed, and the only requirement is that it **never fails** and never
+forces a session reset. This is that mode, and it is **permanent on this
+machine** (launch-time enforcement, below).
+
+## The arithmetic, per configured limit
+
+Trigger = `limit − min(2×16384, limit/4)`; worst case = 2×trigger + 8,192
+output, against the **257,472-token** KV cache (fp8, block 64):
+
+| limit.context | trigger fires at | worst-case pair | headroom | verdict |
+|---|---|---|---|---|
+| 200,000 (old default) | ~167 K | ~342 K | −85 K | structurally guaranteed failure (28/28 + 42/42 observed) |
+| 128,000 (first fix) | 96 K | ~200 K | 57 K | single-session safe; tight with parallel sessions |
+| 96,000 | 72 K | ~152 K | 105 K | safe, longer working stretches |
+| **64,000 (never-reset default)** | **48 K** | **~104 K** | **153 K** | **safe even with multiple resident sessions; this is the policy target** |
+
+Post-compaction the session retains `keepRecentTokens` = 20,000 plus the
+checkpoint summary, so a 64 K limit still leaves a working context between
+compactions — and when the trigger fires, the pair fits with 153 K of
+headroom, absorbing prefix-cache estimation error and parallel residents.
+
+## Why event-driven at a low threshold beats a clock interval
+
+There is no native "compact every N minutes" knob, and a clock would be the
+wrong shape anyway: it would fire uselessly in idle stretches and too late in
+dense ones. The low-threshold trigger **is** the interval — it fires exactly
+when a long-running project actually approaches the (now small) ceiling, as
+often as the work demands, for $0, and every attempt fits the KV cache.
+
+## The permanent half: launch-time enforcement
+
+The provider limit is **cached at session start** (the failure that recurred
+on 2026-09-20: a session that started before the first fix kept the 200 K
+budget and logged 42 `INVALID_CHECKPOINT` failures while the config on disk
+said 128 K). Config edits alone therefore cannot be the whole fix — any
+session that starts between a drift event and a manual repair inherits the bad
+limit. So the local launcher now enforces it on **every launch**:
+
+```sh
+# ~/.local/bin/mcode (the user-owned wrapper that already sets fullscreen TUI)
+/home/keyspark/keys-.../compaction-fix/enforce-continuous-compaction.sh
+```
+
+The enforcer (`enforce-continuous-compaction.sh`) repairs the limit to
+`CONTINUOUS_COMPACTION_LIMIT` (default 64,000) via the surgical setter —
+idempotent, silent, and verified on the happy path; loud on stderr but
+non-fatal if enforcement fails (a broken enforcer must not brick the CLI).
+Verified live on 2026-09-20: `128000 → 64000` applied, backup written,
+config parses, `mcode --version` through the wrapper still works, and
+`check-status.sh` reports trigger ≈ 48 K / pair ≈ 104 K / CONTINUOUS.
+
+## The watchdog half: keeper on an interval
+
+`keeper.sh` is the set-interval component: wire it to cron or a systemd user
+timer (ready-made unit snippets in its footer). Each run checks (1) config
+drift against the policy target, (2) fresh `context_compaction_failed` events
+in the runtime logs with session attribution, and (3) reminds of the cached-
+limit rule: a session failing after a config fix is running the OLD limit and
+must be restarted.
+
+## Honest status (2026-09-20)
+
+- Enforcement, math, and wrapper integration: **verified live** (this machine).
+- The session that logged the 42 failures **cannot be saved** — it cached the
+  200 K limit at start; no config change reaches it. Restart MCode; every
+  session from the next launch onward starts on the 64 K never-reset budget.
+- End-to-end proof of a **successful** auto-compaction under the new policy is
+  pending the first post-restart long session; `check-status.sh` step 2 in
+  *Verify* above is the acceptance check (`outcome":"succeeded"`).
+- The 128 K first-fix value remains available
+  (`set-glm53-context-limit.py --limit 128000`) for single-session, longer-
+  stretch setups; the wrapper default is 64 K for the never-reset guarantee.
