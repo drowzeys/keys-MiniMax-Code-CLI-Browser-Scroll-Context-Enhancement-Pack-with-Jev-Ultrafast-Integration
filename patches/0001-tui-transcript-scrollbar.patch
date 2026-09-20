@@ -1,0 +1,339 @@
+From 0b24a7778741fda335a9a2074464c69911feb1aa Mon Sep 17 00:00:00 2001
+From: drowzeys <drowzeys@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:10:26 -0400
+Subject: [PATCH] feat(tui): enable an interactive fullscreen transcript
+ scrollbar
+
+The fullscreen transcript viewport never turned on the Engine's ScrollView
+scrollbar, so long transcripts had no visible scroll affordance, and the
+dormant Pi scrollbar contract only accepted presses exactly on the painted
+one-column thumb, which is practically ungrabbable in real terminals.
+
+- Enable the existing scrollbar: "always" option for the fullscreen body
+  viewport in ChatLayout.
+- Widen the Engine press hit target to a three-column span ending at the
+  painted bar column and covering the full track height (engine local
+  change L035).
+- Factor the drag mapping into dragScrollbarTo and center the thumb under
+  a press on the empty track before dragging; presses on the thumb keep
+  the classic in-place grab.
+
+Validation: tsc -p tsconfig.standalone.json clean; vitest
+tui-scrollbar-interaction.test.ts (new, SGR press/drag/release sequences
+through VirtualTerminal) and tui-engine-local-deltas.test.ts pass;
+node scripts/source-inventory.mjs --write recorded the new test file.
+---
+ .../tui/src/tui/engine/LOCAL_CHANGES.json     |   8 +-
+ packages/tui/src/tui/engine/LOCAL_CHANGES.md  |   8 ++
+ packages/tui/src/tui/engine/tui-alt-screen.ts |  58 +++++---
+ packages/tui/src/tui/shell/chat-layout.ts     |   1 +
+ .../unit/tui-scrollbar-interaction.test.ts    | 127 ++++++++++++++++++
+ release/public-source.json                    |   1 +
+ test/vitest-suites.json                       |   1 +
+ 7 files changed, 182 insertions(+), 22 deletions(-)
+ create mode 100644 packages/tui/test/unit/tui-scrollbar-interaction.test.ts
+
+diff --git a/packages/tui/src/tui/engine/LOCAL_CHANGES.json b/packages/tui/src/tui/engine/LOCAL_CHANGES.json
+index 8d88e13..253f8db 100644
+--- a/packages/tui/src/tui/engine/LOCAL_CHANGES.json
++++ b/packages/tui/src/tui/engine/LOCAL_CHANGES.json
+@@ -148,11 +148,11 @@
+     },
+     {
+       "path": "tui-alt-screen.ts",
+-      "currentSha256": "dd8acaa441bab2e674e6cba946dcb130b97e51098adf158bda1f73bd027d7a4b",
+-      "changeIds": ["L005", "L011", "L019", "L020", "L025", "L031"],
++      "currentSha256": "08fd1f3f073ae7317024869b3f2190f24fb1113d6064b48355c3721c8d1a0308",
++      "changeIds": ["L005", "L011", "L019", "L020", "L025", "L031", "L035"],
+       "upstreamCommit": "4e494929998d6bc4fccf75e0a233f727db4b70ee,1ac6128e66bd44668b58db773c2a76c29163ade5",
+-      "reason": "Keep strict TypeScript fixes and layout-first mouse dispatch, join path and kebab-case word segments, and expose configurable fullscreen selection copying helpers. 活动搜索索引与命中复用 独立面板声明键盘分页归属。",
+-      "behaviorImpact": "Fullscreen product interaction clicks and Pi-owned text selection coexist; double-click selects complete path-like tokens, and hosts can disable automatic copy or copy an active selection explicitly. 搜索交互复用索引。 handlesViewportKeys 为 true 时，fullscreen 分页交给焦点面板；默认仍由外层视口处理。"
++      "reason": "Keep strict TypeScript fixes and layout-first mouse dispatch, join path and kebab-case word segments, and expose configurable fullscreen selection copying helpers. 活动搜索索引与命中复用 独立面板声明键盘分页归属。 滚动条命中区域覆盖绘制的滑道，滑道按压先居中滑块再拖拽。",
++      "behaviorImpact": "Fullscreen product interaction clicks and Pi-owned text selection coexist; double-click selects complete path-like tokens, and hosts can disable automatic copy or copy an active selection explicitly. 搜索交互复用索引。 handlesViewportKeys 为 true 时，fullscreen 分页交给焦点面板；默认仍由外层视口处理。 可见滚动条可拖拽，点击滑道空白处滑块跳转至指针位置后继续拖拽。"
+     },
+     {
+       "path": "tui-main-screen.ts",
+diff --git a/packages/tui/src/tui/engine/LOCAL_CHANGES.md b/packages/tui/src/tui/engine/LOCAL_CHANGES.md
+index a0ec304..5751191 100644
+--- a/packages/tui/src/tui/engine/LOCAL_CHANGES.md
++++ b/packages/tui/src/tui/engine/LOCAL_CHANGES.md
+@@ -106,3 +106,11 @@ Remove `L024` when the selected Pi baseline natively matches legacy-terminal `Ct
+ - Change: strip leading zone prefixes before comparing screen lines, so initial frames, differential redraws, and history caches stay clean. Fullscreen behavior is unchanged.
+ - Evidence: `test/unit/tui-engine-local-deltas.test.ts` checks initial and differential writes.
+ - Removal condition: the selected Pi baseline supplies equivalent normal-mode filtering.
++
++## L035: Fullscreen scrollbar track interaction
++
++- Product contract: the fullscreen transcript is the product's primary scrollable surface, and MCode enables the Engine's dormant `ScrollView` scrollbar for it through the existing `scrollbar: "always"` option in the product-owned `chat-layout.ts`. A one-column, thumb-only press target makes the painted bar practically ungrabbable in real terminals, so the Engine contract Pi exposes is not operable as-is.
++- Minimal difference: `tui-alt-screen.ts` widens the scrollbar press hit target to a three-column span ending at the painted bar column and covering the full track height, and factors the existing drag mapping into `dragScrollbarTo`; a press on the empty track centers the thumb under the pointer before dragging, while a press on the thumb keeps the classic in-place grab. `components/scroll-view.ts` and `layout.ts` stay at the Pi baseline.
++- User impact: the always-on fullscreen transcript scrollbar can be grabbed, dragged, and clicked to jump; pointer presses on the thumb do not move content until dragged.
++- Evidence: `test/unit/tui-scrollbar-interaction.test.ts` feeds real SGR mouse press, motion, and release sequences through VirtualTerminal and asserts which content lines the viewport shows after track jumps, thumb grabs, and drags; the existing engine local-delta and Chat layout suites cover unchanged selection and layout behavior.
++- Removal condition: the selected Pi baseline provides an equivalent wide, track-clickable scrollbar interaction contract for product-enabled scroll views and MCode migrates to it.
+diff --git a/packages/tui/src/tui/engine/tui-alt-screen.ts b/packages/tui/src/tui/engine/tui-alt-screen.ts
+index e92b1b0..5e86cf1 100644
+--- a/packages/tui/src/tui/engine/tui-alt-screen.ts
++++ b/packages/tui/src/tui/engine/tui-alt-screen.ts
+@@ -146,6 +146,14 @@ interface ScrollbarTarget {
+ 	geometry: ScrollbarGeometry;
+ }
+ 
++/**
++ * Width in terminal columns of the mouse hit target around a visible scrollbar
++ * track, ending at the painted scrollbar column. Near-miss clicks to the left
++ * of the one-column bar still grab it, matching wide touch targets in native
++ * toolkits, while clicks outside the span keep flowing to content.
++ */
++const SCROLLBAR_TRACK_HIT_COLUMNS = 3;
++
+ type SearchSelectionMode = "query" | "retain" | "next" | "previous";
+ 
+ interface ActiveSearch {
+@@ -778,9 +786,10 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
+ 			const geometry = box ? getScrollbarGeometry(box) : undefined;
+ 			if (
+ 				geometry &&
+-				x === geometry.column &&
+-				y >= geometry.thumbTop &&
+-				y < geometry.thumbTop + geometry.thumbHeight
++				x >= geometry.column - (SCROLLBAR_TRACK_HIT_COLUMNS - 1) &&
++				x <= geometry.column &&
++				y >= geometry.trackTop &&
++				y < geometry.trackTop + geometry.trackHeight
+ 			) {
+ 				return { scrollView, geometry };
+ 			}
+@@ -809,20 +818,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
+ 				this.stopScrollbarDrag();
+ 				return true;
+ 			}
+-			const box = this.currentLayout
+-				? getScrollViewBox(this.currentLayout, this.scrollbarDrag.scrollView)
+-				: undefined;
+-			const geometry = box ? getScrollbarGeometry(box) : undefined;
+-			if (geometry) {
+-				const maxThumbOffset = geometry.trackHeight - geometry.thumbHeight;
+-				const thumbOffset = Math.max(
+-					0,
+-					Math.min(maxThumbOffset, event.y - geometry.trackTop - this.scrollbarDrag.grabOffset),
+-				);
+-				const scrollTop =
+-					maxThumbOffset === 0 ? 0 : Math.round((thumbOffset / maxThumbOffset) * geometry.maxScrollTop);
+-				this.scrollbarDrag.scrollView.scrollTo(scrollTop);
+-			}
++			this.dragScrollbarTo(event.y);
+ 			return true;
+ 		}
+ 
+@@ -839,13 +835,39 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
+ 		this.pressedUrl = undefined;
+ 		this.selectionDragged = false;
+ 		this.setScrollbarHover(target.scrollView);
++		const onThumb =
++			event.y >= target.geometry.thumbTop &&
++			event.y < target.geometry.thumbTop + target.geometry.thumbHeight;
+ 		this.scrollbarDrag = {
+ 			scrollView: target.scrollView,
+-			grabOffset: event.y - target.geometry.thumbTop,
++			grabOffset: onThumb
++				? event.y - target.geometry.thumbTop
++				: Math.max(0, Math.floor(target.geometry.thumbHeight / 2)),
+ 		};
++		// A press on the empty track jumps the thumb so its center follows the
++		// pointer, then keeps dragging from there; a press on the thumb itself
++		// grabs it in place without moving.
++		if (!onThumb) this.dragScrollbarTo(event.y);
+ 		return true;
+ 	}
+ 
++	private dragScrollbarTo(y: number): void {
++		if (!this.scrollbarDrag || !this.currentLayout) return;
++		const box = getScrollViewBox(this.currentLayout, this.scrollbarDrag.scrollView);
++		const geometry = box ? getScrollbarGeometry(box) : undefined;
++		if (!geometry) return;
++		const maxThumbOffset = geometry.trackHeight - geometry.thumbHeight;
++		const thumbOffset = Math.max(
++			0,
++			Math.min(maxThumbOffset, y - geometry.trackTop - this.scrollbarDrag.grabOffset),
++		);
++		const scrollTop =
++			maxThumbOffset === 0
++				? 0
++				: Math.round((thumbOffset / maxThumbOffset) * geometry.maxScrollTop);
++		this.scrollbarDrag.scrollView.scrollTo(scrollTop);
++	}
++
+ 	private stopScrollbarDrag(): void {
+ 		this.scrollbarDrag = undefined;
+ 	}
+diff --git a/packages/tui/src/tui/shell/chat-layout.ts b/packages/tui/src/tui/shell/chat-layout.ts
+index 01abf46..921c023 100644
+--- a/packages/tui/src/tui/shell/chat-layout.ts
++++ b/packages/tui/src/tui/shell/chat-layout.ts
+@@ -124,6 +124,7 @@ export class TuiChatLayout implements Component {
+       follow: 'end',
+       primary: true,
+       overscroll: 'contain',
++      scrollbar: 'always',
+     });
+     this.fullscreenLayoutRoot = new VStack([
+       {
+diff --git a/packages/tui/test/unit/tui-scrollbar-interaction.test.ts b/packages/tui/test/unit/tui-scrollbar-interaction.test.ts
+new file mode 100644
+index 0000000..276a9b6
+--- /dev/null
++++ b/packages/tui/test/unit/tui-scrollbar-interaction.test.ts
+@@ -0,0 +1,127 @@
++import { stripVTControlCharacters } from 'node:util';
++import { describe, expect, it } from 'vitest';
++
++import { ScrollView, TuiAltScreen, type Component } from '../../src/tui/engine/public.js';
++import { VirtualTerminal } from '../pi-084-upstream/virtual-terminal.js';
++
++const COLUMNS = 20;
++const ROWS = 10;
++const CONTENT_LINES = 60;
++
++class ScrollableLines implements Component {
++  private readonly lines: string[] = [];
++
++  constructor(count: number) {
++    for (let index = 0; index < count; index++) {
++      this.lines.push(`line-${String(index).padStart(2, '0')}`);
++    }
++  }
++
++  render(): string[] {
++    return [...this.lines];
++  }
++
++  invalidate(): void {}
++}
++
++function viewportText(terminal: VirtualTerminal): string {
++  return stripVTControlCharacters(terminal.getViewport().join('\n'));
++}
++
++function sgrPress(x: number, y: number): string {
++  return `\x1b[<0;${x + 1};${y + 1}M`;
++}
++
++function sgrMotion(x: number, y: number): string {
++  return `\x1b[<32;${x + 1};${y + 1}M`;
++}
++
++function sgrRelease(x: number, y: number): string {
++  return `\x1b[<0;${x + 1};${y + 1}m`;
++}
++
++async function createScrollbarScreen(): Promise<{
++  terminal: VirtualTerminal;
++  tui: TuiAltScreen;
++  scrollView: ScrollView;
++}> {
++  const terminal = new VirtualTerminal(COLUMNS, ROWS);
++  const content = new ScrollableLines(CONTENT_LINES);
++  const scrollView = new ScrollView(content, {
++    primary: true,
++    overscroll: 'contain',
++    scrollbar: 'always',
++  });
++  const tui = new TuiAltScreen(terminal);
++  tui.setLayoutRoot(scrollView);
++  tui.start();
++  await terminal.waitForRender();
++  return { terminal, tui, scrollView };
++}
++
++describe('Fullscreen scrollbar interaction', () => {
++  it('shows the top of the content before any interaction', async () => {
++    const { terminal } = await createScrollbarScreen();
++    expect(viewportText(terminal)).toContain('line-00');
++    expect(viewportText(terminal)).not.toContain('line-59');
++  });
++
++  it('jumps the thumb to a track press and keeps dragging from there', async () => {
++    const { terminal } = await createScrollbarScreen();
++    // Press the empty track at the bottom of the right-edge scrollbar.
++    terminal.sendInput(sgrPress(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++    expect(viewportText(terminal)).toContain('line-59');
++    expect(viewportText(terminal)).not.toContain('line-00');
++    terminal.sendInput(sgrRelease(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++  });
++
++  it('grabs near-miss clicks within the widened hit span', async () => {
++    const { terminal } = await createScrollbarScreen();
++    // Press two columns left of the painted one-column bar.
++    terminal.sendInput(sgrPress(COLUMNS - 3, ROWS - 1));
++    await terminal.waitForRender();
++    expect(viewportText(terminal)).toContain('line-59');
++    expect(viewportText(terminal)).not.toContain('line-00');
++    terminal.sendInput(sgrRelease(COLUMNS - 3, ROWS - 1));
++    await terminal.waitForRender();
++  });
++
++  it('keeps an on-thumb press in place and drags proportionally', async () => {
++    const { terminal } = await createScrollbarScreen();
++    // Jump to the end first via a track press at the bottom, then release.
++    terminal.sendInput(sgrPress(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++    terminal.sendInput(sgrRelease(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++    // The thumb now spans the bottom rows; press it directly.
++    terminal.sendInput(sgrPress(COLUMNS - 1, ROWS - 2));
++    await terminal.waitForRender();
++    // An on-thumb press must not move content on its own.
++    expect(viewportText(terminal)).toContain('line-59');
++    // Drag the thumb up the track.
++    terminal.sendInput(sgrMotion(COLUMNS - 1, Math.floor(ROWS / 2)));
++    await terminal.waitForRender();
++    const text = viewportText(terminal);
++    expect(text).not.toContain('line-59');
++    expect(text).not.toContain('line-00');
++    terminal.sendInput(sgrRelease(COLUMNS - 1, Math.floor(ROWS / 2)));
++    await terminal.waitForRender();
++  });
++
++  it('ignores presses outside the hit span', async () => {
++    const { terminal } = await createScrollbarScreen();
++    // Jump to the end via a track press, then release.
++    terminal.sendInput(sgrPress(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++    terminal.sendInput(sgrRelease(COLUMNS - 1, ROWS - 1));
++    await terminal.waitForRender();
++    // Press three columns left of the bar, outside the hit span.
++    terminal.sendInput(sgrPress(COLUMNS - 4, 0));
++    await terminal.waitForRender();
++    terminal.sendInput(sgrRelease(COLUMNS - 4, 0));
++    await terminal.waitForRender();
++    expect(viewportText(terminal)).toContain('line-59');
++  });
++});
+diff --git a/release/public-source.json b/release/public-source.json
+index 369186f..7abfd54 100644
+--- a/release/public-source.json
++++ b/release/public-source.json
+@@ -3243,6 +3243,7 @@
+     "packages/tui/test/unit/tui-provider-manager.test.ts",
+     "packages/tui/test/unit/tui-provider-onboarding.test.ts",
+     "packages/tui/test/unit/tui-runtime-adapter.test.ts",
++    "packages/tui/test/unit/tui-scrollbar-interaction.test.ts",
+     "packages/tui/test/unit/tui-session-manager.test.ts",
+     "packages/tui/test/unit/tui-shell-block.test.ts",
+     "packages/tui/test/unit/tui-status-line-items.test.ts",
+diff --git a/test/vitest-suites.json b/test/vitest-suites.json
+index 112304a..443eaaf 100644
+--- a/test/vitest-suites.json
++++ b/test/vitest-suites.json
+@@ -77,6 +77,7 @@
+       "packages/tui/test/unit/tui-chat-controller.test.ts",
+       "packages/tui/test/unit/tui-duration.test.ts",
+       "packages/tui/test/unit/tui-engine-local-deltas.test.ts",
++      "packages/tui/test/unit/tui-scrollbar-interaction.test.ts",
+       "packages/tui/test/unit/tui-image-preview.test.ts",
+       "packages/tui/test/unit/tui-session-manager.test.ts",
+       "packages/tui/test/unit/tui-shell-block.test.ts",
+-- 
+2.43.0
+

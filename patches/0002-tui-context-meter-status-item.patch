@@ -1,0 +1,225 @@
+From 4076c6f521eadccc05c1179c9a73baf004a0a7af Mon Sep 17 00:00:00 2001
+From: drowzeys <drowzeys@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:18:58 -0400
+Subject: [PATCH] feat(tui): add a context-meter status line item
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The status line can already show remaining context headroom as a bare
+percentage (context-remaining), but a numeric readout is easy to miss
+while working. Add an opt-in context-meter item that renders the same
+remaining-headroom value as a compact gauge, e.g.
+'Context ▕██████░░▏ 77% left', so the line drains and recolors as the
+Session approaches its context window.
+
+- New canonical item 'context-meter' with 'context-bar' and
+  'context-gauge' aliases; not part of the default item order.
+- Renderer shares the runtime usage snapshot, model fallback, and
+  error/warning thresholds with 'context-remaining', and shrinks to a
+  shorter gauge before collapsing to the 'Ctx N%' minimal variant.
+- Settings picker gains English/Chinese descriptions; the shared status
+  line documentation covers the item, aliases, and opt-in semantics.
+
+Validation: tsc -p tsconfig.standalone.json clean; vitest
+tui-status-line-items.test.ts, tui-workspace-status-line.test.ts, and
+status-line-picker.test.ts pass (98 tests); node
+scripts/source-inventory.mjs passes with no inventory changes.
+---
+ packages/tui/docs/status-line-config.md       |  4 +-
+ .../tui/features/settings/status-line-copy.ts |  1 +
+ packages/tui/src/tui/shell/chrome.ts          | 36 +++++++++++
+ .../tui/src/tui/shell/status-line-items.ts    |  3 +
+ .../test/unit/tui-status-line-items.test.ts   | 63 +++++++++++++++++++
+ 5 files changed, 106 insertions(+), 1 deletion(-)
+
+diff --git a/packages/tui/docs/status-line-config.md b/packages/tui/docs/status-line-config.md
+index 9975de6..fe87ba3 100644
+--- a/packages/tui/docs/status-line-config.md
++++ b/packages/tui/docs/status-line-config.md
+@@ -60,6 +60,7 @@ Configuration loading checks that the value is an array. The TUI validates indiv
+ | `token-quota` | Token quota / plan |
+ | `cache-read-ratio` | Aggregate cache read ratio for the current session, such as `Cache 80%` |
+ | `context-remaining` | Remaining context percentage from the same runtime snapshot as `/context`; hidden if unavailable |
++| `context-meter` | Remaining context gauge, e.g. `Context ▕██████░░▏ 77% left`, from the same runtime snapshot as `/context`; hidden if unavailable; opt-in |
+ | `custom-command` | External command stdout; first line inline by default, optional separate multiline block; opt-in |
+ 
+ `cache-read-ratio` aggregates persisted session usage as `cacheRead / (input + cacheRead + cacheWrite)`, where `input` is fresh uncached input. It uses existing provider usage fields; missing cache counts contribute zero, so sessions mixing providers can underestimate cache reads. The item is hidden before any prompt tokens exist. In-process notifications refresh the session after usage persists; read failures stay silent. `/usage` also shows Read, Fresh, and Write token counts.
+@@ -78,6 +79,7 @@ Configuration loading checks that the value is an array. The TUI validates indiv
+ | `quota` / `token-plan` | `token-quota` |
+ | `cache-read` | `cache-read-ratio` |
+ | `context` / `context-left` | `context-remaining` |
++| `context-bar` / `context-gauge` | `context-meter` |
+ | `custom` | `custom-command` |
+ 
+ ## Defaults
+@@ -90,7 +92,7 @@ current-dir · session-title · git-branch · review-link · plan-mode · approv
+ 
+ `build-mode` is **not a default**. Explicitly listing it is the only way to enable the machine-readable protocol; the build type does not matter. It may appear anywhere in the list and takes over the entire line to keep free text out of the strict record. Remove it to disable the protocol.
+ 
+-By default, `context-window` shows capacity before usage is available; `context-remaining` replaces it once a runtime usage snapshot exists. Explicit item lists retain the selected presentation. Session changes clear old data, and refresh failures do not reuse stale values. Context comes from the latest runtime snapshot, not a live per-token counter. `cache-read-ratio` remains opt-in. Narrow terminals prioritize permissions, context warnings, model, and session title. Even the shortest context display retains `Ctx` to distinguish it from `5h` / `W` plan quotas.
++By default, `context-window` shows capacity before usage is available; `context-remaining` replaces it once a runtime usage snapshot exists. Explicit item lists retain the selected presentation. Session changes clear old data, and refresh failures do not reuse stale values. Context comes from the latest runtime snapshot, not a live per-token counter. `cache-read-ratio` and `context-meter` remain opt-in; `context-meter` renders the same remaining-headroom value and thresholds as `context-remaining` with an added gauge, so it replaces rather than complements the percentage item in explicit lists. Narrow terminals prioritize permissions, context warnings, model, and session title. Even the shortest context display retains `Ctx` to distinguish it from `5h` / `W` plan quotas.
+ 
+ `custom-command` is also **not a default**. It runs an external command and requires both an explicit item and `tui.customStatusLine.command`.
+ 
+diff --git a/packages/tui/src/tui/features/settings/status-line-copy.ts b/packages/tui/src/tui/features/settings/status-line-copy.ts
+index b6ed99f..9ee787c 100644
+--- a/packages/tui/src/tui/features/settings/status-line-copy.ts
++++ b/packages/tui/src/tui/features/settings/status-line-copy.ts
+@@ -52,6 +52,7 @@ const descriptions: Record<Exclude<TuiStatusLineItem, 'build-mode'>, readonly [s
+   'token-quota': ['Account token quota', '账户额度'],
+   'cache-read-ratio': ['Session cache read ratio', '会话缓存读取比例'],
+   'context-remaining': ['Remaining context window', '剩余上下文窗口'],
++  'context-meter': ['Remaining context gauge', '剩余上下文刻度条'],
+   'custom-command': ['Configured custom command output', '已配置的自定义命令输出'],
+ };
+ 
+diff --git a/packages/tui/src/tui/shell/chrome.ts b/packages/tui/src/tui/shell/chrome.ts
+index b65c552..ec334b4 100644
+--- a/packages/tui/src/tui/shell/chrome.ts
++++ b/packages/tui/src/tui/shell/chrome.ts
+@@ -257,6 +257,15 @@ function buildStatusSegment(
+         ],
+         { shrinkPriority: 50, dropPriority: 80 },
+       );
++    case 'context-meter':
++      return createStatusSegment(
++        [
++          renderContextMeter(state, 'full'),
++          renderContextMeter(state, 'compact'),
++          renderContextMeter(state, 'minimal'),
++        ],
++        { shrinkPriority: 50, dropPriority: 80 },
++      );
+     case 'custom-command':
+       return createStatusSegment(
+         [
+@@ -459,6 +468,33 @@ function renderContextRemaining(
+   return chalk.hex(color)(label);
+ }
+ 
++/**
++ * Renders remaining context headroom as a compact gauge.
++ *
++ * Uses the same snapshot and thresholds as `context-remaining`: the filled
++ * cells show how much headroom is left, so the gauge drains and recolors as
++ * the Session approaches its context window. Returns an empty string when no
++ * usage is known, for the same reasons as the percentage variant.
++ */
++function renderContextMeter(
++  state: TuiShellState,
++  density: 'full' | 'compact' | 'minimal' = 'full',
++): string {
++  const remaining = contextRemainingPercent(state);
++  if (remaining === undefined) return '';
++  const color = remaining <= 10 ? colors.error : remaining <= 25 ? colors.warning : colors.muted;
++  const cells = density === 'full' ? 8 : 6;
++  const filled = Math.round((remaining / 100) * cells);
++  const gauge = `▕${'█'.repeat(filled)}${'░'.repeat(cells - filled)}▏`;
++  const label =
++    density === 'minimal'
++      ? `Ctx ${remaining}%`
++      : density === 'full'
++        ? `Context ${gauge} ${remaining}% left`
++        : `Ctx ${gauge} ${remaining}%`;
++  return chalk.hex(color)(label);
++}
++
+ function renderSubagentIdentity(state: TuiShellState, compact = false): string {
+   if (state.sessionRole !== 'subagent') return '';
+   const agent = formatStatusContextLabel(state.sessionAgentName?.trim() || 'sub-agent');
+diff --git a/packages/tui/src/tui/shell/status-line-items.ts b/packages/tui/src/tui/shell/status-line-items.ts
+index 98ed529..7cffc5f 100644
+--- a/packages/tui/src/tui/shell/status-line-items.ts
++++ b/packages/tui/src/tui/shell/status-line-items.ts
+@@ -34,6 +34,7 @@ export const TUI_STATUS_LINE_ITEMS = [
+   'token-quota',
+   'cache-read-ratio',
+   'context-remaining',
++  'context-meter',
+   'custom-command',
+ ] as const;
+ 
+@@ -67,6 +68,8 @@ const TUI_STATUS_LINE_ITEM_ALIASES: Readonly<Record<string, TuiStatusLineItem>>
+   'cache-read': 'cache-read-ratio',
+   context: 'context-remaining',
+   'context-left': 'context-remaining',
++  'context-bar': 'context-meter',
++  'context-gauge': 'context-meter',
+   custom: 'custom-command',
+ };
+ 
+diff --git a/packages/tui/test/unit/tui-status-line-items.test.ts b/packages/tui/test/unit/tui-status-line-items.test.ts
+index 23ca62d..aa3e5d4 100644
+--- a/packages/tui/test/unit/tui-status-line-items.test.ts
++++ b/packages/tui/test/unit/tui-status-line-items.test.ts
+@@ -582,3 +582,66 @@ describe('review link status item', () => {
+     expect(narrow).toContain('!312');
+   });
+ });
++
++describe('context meter item', () => {
++  it('resolves the canonical id and its aliases', () => {
++    expect(parseTuiStatusLineItem('context-meter')).toBe('context-meter');
++    expect(parseTuiStatusLineItem('context-bar')).toBe('context-meter');
++    expect(parseTuiStatusLineItem('context-gauge')).toBe('context-meter');
++  });
++
++  it('stays out of the default status line', () => {
++    expect(TUI_STATUS_LINE_DEFAULT_ITEMS).not.toContain('context-meter');
++    const state = {
++      ...BASE_STATE,
++      contextUsage: { usedTokens: 20_000, contextWindowTokens: 100_000 },
++    };
++    expect(stripAnsi(render(state))).not.toContain('▕');
++  });
++
++  it('renders the remaining-headroom gauge when configured explicitly', () => {
++    const state = {
++      ...BASE_STATE,
++      statusLineItems: ['context-meter'],
++      contextUsage: { usedTokens: 20_000, contextWindowTokens: 100_000 },
++    };
++    expect(stripAnsi(render(state))).toContain('Context ▕██████░░▏ 80% left');
++  });
++
++  it('drains the gauge with the remaining headroom', () => {
++    const state = {
++      ...BASE_STATE,
++      statusLineItems: ['context-meter'],
++      contextUsage: { usedTokens: 50_000, contextWindowTokens: 100_000 },
++    };
++    expect(stripAnsi(render(state))).toContain('▕████░░░░▏ 50% left');
++  });
++
++  it('shrinks to a shorter gauge in narrow terminals', () => {
++    const state = {
++      ...BASE_STATE,
++      statusLineItems: ['context-meter'],
++      contextUsage: { usedTokens: 50_000, contextWindowTokens: 100_000 },
++    };
++    const narrow = stripAnsi(render(state, 20));
++    expect(narrow).toContain('Ctx');
++    expect(narrow).toContain('50%');
++    expect(narrow).not.toContain('left');
++    expect(narrow).not.toContain('▕████░░░░▏');
++  });
++
++  it('is hidden without usage and never shows NaN', () => {
++    expect(stripAnsi(render({ ...BASE_STATE, statusLineItems: ['context-meter'] }))).not.toContain(
++      '▕',
++    );
++    expect(
++      stripAnsi(
++        render({
++          ...BASE_STATE,
++          statusLineItems: ['context-meter'],
++          contextUsage: { usedTokens: Number.NaN, contextWindowTokens: 100_000 },
++        }),
++      ),
++    ).not.toContain('NaN');
++  });
++});
+-- 
+2.43.0
+
