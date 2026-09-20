@@ -21,7 +21,9 @@ RUN git init -q . \
  && git fetch -q --depth 1 origin a5639bcc6146754e01f1ae18bb88545f18299fd6 \
  && git checkout -q FETCH_HEAD
 COPY patches/ /patches/
-RUN git am /patches/0001-tui-transcript-scrollbar.patch /patches/0002-tui-context-meter-status-item.patch \
+RUN git config user.email "keys-pack-builder@localhost" \
+ && git config user.name "keys-pack builder" \
+ && git am /patches/0001-tui-transcript-scrollbar.patch /patches/0002-tui-context-meter-status-item.patch \
  && pnpm install --frozen-lockfile \
  && node scripts/build.mjs
 
